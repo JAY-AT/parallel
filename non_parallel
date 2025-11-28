@@ -1,0 +1,195 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define NUM_INSERTS 1000
+#define NAME_LEN 10 
+
+typedef struct {
+    char name[NAME_LEN];
+    int id;
+} Student;
+
+const char *TXT_FILE = "students.txt";
+
+
+int get_next_id() {
+    FILE *fp = fopen(TXT_FILE, "rb");
+    if (!fp) {
+        return 1;
+    }
+    
+    Student s;
+    int max_id = 0;
+    
+    while (fread(&s, sizeof(Student), 1, fp)) {
+        if (s.id > max_id) {
+            max_id = s.id;
+        }
+    }
+    
+    fclose(fp);
+    return max_id + 1;
+}
+
+void insert_student(int id, const char *name) {
+    Student s;
+    
+    // Initialize the struct with binary zeros
+    memset(&s, 0, sizeof(Student));
+    
+
+    strncpy(s.name, name, NAME_LEN - 1);  // -1 to leave space for null terminator
+    s.name[NAME_LEN - 1] = '\0';  // Ensure null termination
+    
+    s.id = id;
+    
+
+    FILE *fp = fopen(TXT_FILE, "ab");
+    if (!fp) {
+        printf("Error opening TXT file in binary mode!\n");
+        return;
+    }
+    
+
+    size_t written = fwrite(&s, sizeof(Student), 1, fp);
+    if (written != 1) {
+        printf("Error writing to TXT file!\n");
+    }
+    
+    fclose(fp);
+}
+
+
+void display_student_analysis(Student s) {
+    printf("ID: %d, Name: '%s'", s.id, s.name);
+    
+    // Show the actual bytes in the name field
+    printf(" [Bytes: ");
+    for (int i = 0; i < NAME_LEN; i++) {
+        if (s.name[i] == '\0') {
+            printf("\\0");
+        } else if (s.name[i] >= 32 && s.name[i] <= 126) {
+            printf("%c", s.name[i]);
+        } else {
+            printf("?");
+        }
+        if (i < NAME_LEN - 1) printf(" ");
+    }
+    printf("]\n");
+}
+
+
+void display_all_students() {
+    FILE *fp = fopen(TXT_FILE, "rb");
+    if (!fp) {
+        printf("No students file found!\n");
+        return;
+    }
+    
+    Student s;
+    int count = 0;
+    
+    printf("\n=== ALL STUDENTS (WITH BINARY ANALYSIS) ===\n");
+    printf("Struct size: %zu bytes (%d for name, %zu for id)\n", 
+           sizeof(Student), NAME_LEN, sizeof(int));
+    
+    while (fread(&s, sizeof(Student), 1, fp)) {
+        printf("Student %d: ", ++count);
+        display_student_analysis(s);
+    }
+    
+    fclose(fp);
+    
+    if (count == 0) {
+        printf("No student records found.\n");
+    } else {
+        printf("\nTotal students: %d\n", count);
+        printf("Total file size: %ld bytes\n", count * sizeof(Student));
+    }
+}
+
+
+void show_raw_binary() {
+    FILE *fp = fopen(TXT_FILE, "rb");
+    if (!fp) {
+        printf("Cannot open file for raw binary analysis!\n");
+        return;
+    }
+    
+    printf("\n=== RAW BINARY CONTENT ===\n");
+    
+    Student s;
+    int record_count = 0;
+    
+    while (fread(&s, sizeof(Student), 1, fp)) {
+        printf("Record %d: ", ++record_count);
+        
+        // Print each byte of the struct
+        unsigned char *bytes = (unsigned char*)&s;
+        for (size_t i = 0; i < sizeof(Student); i++) {
+            printf("%02X ", bytes[i]);
+        }
+        printf(" | ");
+        
+
+        for (size_t i = 0; i < sizeof(Student); i++) {
+            if (bytes[i] >= 32 && bytes[i] <= 126) {
+                printf("%c", bytes[i]);
+            } else {
+                printf(".");
+            }
+        }
+        printf("\n");
+    }
+    
+    fclose(fp);
+}
+
+int main() {
+
+    int next_id = get_next_id();
+    
+    printf("Starting insertion from ID: %d\n", next_id);
+    printf("Using fixed-length name[%d] with binary storage\n", NAME_LEN);
+    printf("Struct size: %zu bytes\n\n", sizeof(Student));
+    
+    insert_student(next_id, "Jay");        // 3 chars + 7 excess
+    insert_student(next_id + 1, "Eric");   // 4 chars + 6 excess  
+    insert_student(next_id + 2, "James");  // 5 chars + 5 excess
+    insert_student(next_id + 3, "Jennifer"); // 8 chars + 2 excess
+    insert_student(next_id + 4, "Alexander"); // 9 chars + 1 excess
+    insert_student(next_id + 5, "1234567890"); // Exactly 10 chars
+    
+
+    for (int i = 6; i < NUM_INSERTS; i++) {
+        insert_student(next_id + i, "Student");
+    }
+    
+    printf("Finished inserting %d students\n", NUM_INSERTS);
+    printf("Last ID used: %d\n", next_id + NUM_INSERTS - 1);
+    
+ 
+    printf("\n=== FIRST 6 STUDENTS (DEMONSTRATING EXCESS BYTES) ===\n");
+    FILE *fp = fopen(TXT_FILE, "rb");
+    if (fp) {
+        Student s;
+        for (int i = 0; i < 6 && fread(&s, sizeof(Student), 1, fp); i++) {
+            display_student_analysis(s);
+        }
+        fclose(fp);
+    }
+    
+
+    FILE *count_fp = fopen(TXT_FILE, "rb");
+    if (count_fp) {
+        fseek(count_fp, 0, SEEK_END);
+        long size = ftell(count_fp);
+        fclose(count_fp);
+        printf("\nTotal file size: %ld bytes\n", size);
+        printf("Total records: %ld\n", size / sizeof(Student));
+    }
+    
+
+    return 0;
+}
